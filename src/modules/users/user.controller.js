@@ -1,6 +1,5 @@
-const bcrypt = require('bcryptjs');
-const prisma = require('../../config/prisma');
-const { generateToken } = require('../../utils/token');
+const userService = require('./user.service');
+const { success } = require('../../utils/responseHandler');
 const Joi = require('joi');
 
 const userController = {
@@ -17,38 +16,14 @@ const userController = {
 
       const { error, value } = schema.validate(req.body);
       if (error) {
-        return res.status(400).json({ status: 'fail', message: error.details[0].message });
+        const err = new Error(error.details[0].message);
+        err.statusCode = 400;
+        throw err;
       }
 
-      const { name, email, password, role } = value;
-
-      // Check if user already exists
-      const existingUser = await prisma.user.findUnique({ where: { email } });
-      if (existingUser) {
-        return res.status(400).json({ status: 'fail', message: 'Email already registered' });
-      }
-
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 12);
-
-      // Create user
-      const user = await prisma.user.create({
-        data: {
-          name,
-          email,
-          password: hashedPassword,
-          role,
-        },
-      });
-
-      // Remove password from response
-      const { password: _, ...userWithoutPassword } = user;
-
-      res.status(201).json({
-        status: 'success',
-        message: 'User registered successfully',
-        data: userWithoutPassword,
-      });
+      const user = await userService.registerUser(value);
+      
+      return success(res, 'User registered successfully', user, 201);
     } catch (error) {
       next(error);
     }
@@ -64,29 +39,15 @@ const userController = {
 
       const { error, value } = schema.validate(req.body);
       if (error) {
-        return res.status(400).json({ status: 'fail', message: error.details[0].message });
+        const err = new Error(error.details[0].message);
+        err.statusCode = 400;
+        throw err;
       }
 
       const { email, password } = value;
+      const result = await userService.loginUser(email, password);
 
-      // Find user
-      const user = await prisma.user.findUnique({ where: { email } });
-      if (!user || !(await bcrypt.compare(password, user.password))) {
-        return res.status(401).json({ status: 'fail', message: 'Invalid email or password' });
-      }
-
-      // Generate token
-      const token = generateToken({ id: user.id, role: user.role });
-
-      // Remove password from response
-      const { password: _, ...userWithoutPassword } = user;
-
-      res.status(200).json({
-        status: 'success',
-        message: 'Logged in successfully',
-        token,
-        data: userWithoutPassword,
-      });
+      return success(res, 'Logged in successfully', result);
     } catch (error) {
       next(error);
     }

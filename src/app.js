@@ -33,8 +33,10 @@ app.use('/api/v1/bookings', bookingRoutes);
 // Error handling middleware
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
+  const status = statusCode >= 400 && statusCode < 500 ? 'fail' : 'error';
+
   res.status(statusCode).json({
-    status: 'error',
+    status,
     message: err.message,
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
