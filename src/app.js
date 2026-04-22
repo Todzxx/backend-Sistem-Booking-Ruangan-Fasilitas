@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
 const userRoutes = require('./modules/users/user.routes');
+const facilityRoutes = require('./modules/facilities/facility.routes');
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/v1/auth', userRoutes);
+app.use('/api/v1/facilities', facilityRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
