@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
+const userRoutes = require('./modules/users/user.routes');
 
 dotenv.config();
 
@@ -21,6 +22,9 @@ app.get('/', (req, res) => {
     status: 'Server is running'
   });
 });
+
+// Routes
+app.use('/api/v1/auth', userRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
