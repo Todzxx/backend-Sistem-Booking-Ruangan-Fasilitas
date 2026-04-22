@@ -24,7 +24,8 @@
   },
   "homepage": "https://github.com/Todzxx/backend-Sistem-Booking-Ruangan-Fasilitas#readme",
   "dependencies": {
-    "@prisma/client": "^7.7.0",
+    "@prisma/client": "^6.0.0",
+    "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -37,6 +38,6 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
-    "prisma": "^7.7.0"
+    "prisma": "^6.0.0"
   }
 }
