@@ -3,6 +3,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
+const userRoutes = require('./modules/users/user.routes');
+const facilityRoutes = require('./modules/facilities/facility.routes');
+const bookingRoutes = require('./modules/bookings/booking.routes');
 
 dotenv.config();
 
@@ -21,6 +24,11 @@ app.get('/', (req, res) => {
     status: 'Server is running'
   });
 });
+
+// Routes
+app.use('/api/v1/auth', userRoutes);
+app.use('/api/v1/facilities', facilityRoutes);
+app.use('/api/v1/bookings', bookingRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
