@@ -14,6 +14,9 @@ router.use(authMiddleware);
 // Check availability (Query params: facilityId, startTime, endTime)
 router.get('/check', bookingController.checkAvailability);
 
+// Get all bookings for a specific facility (part of Calendar System)
+router.get('/facility/:facilityId', bookingController.getBookingsByFacility);
+
 // User operations
 router.post('/', bookingController.createBooking);
 router.get('/my', bookingController.getMyBookings);

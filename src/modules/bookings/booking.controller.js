@@ -246,6 +246,36 @@ const bookingController = {
       next(error);
     }
   },
+
+  /**
+   * Get all bookings for a specific facility (useful for calendar view)
+   * This is part of the Calendar System feature.
+   */
+  getBookingsByFacility: async (req, res, next) => {
+    try {
+      const { facilityId } = req.params;
+
+      // Find all bookings that are not REJECTED or CANCELLED
+      const bookings = await prisma.booking.findMany({
+        where: {
+          facilityId,
+          status: { in: ['PENDING', 'APPROVED'] },
+        },
+        include: {
+          user: { select: { name: true } },
+        },
+        orderBy: { startTime: 'asc' },
+      });
+
+      res.status(200).json({
+        status: 'success',
+        results: bookings.length,
+        data: bookings,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 
 module.exports = bookingController;
