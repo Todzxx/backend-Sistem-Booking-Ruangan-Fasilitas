@@ -51,9 +51,10 @@ model Booking {
   facility   Facility      @relation(fields: [facilityId], references: [id])
   startTime  DateTime
   endTime    DateTime
-  purpose    String
-  status     BookingStatus @default(PENDING)
-  notes      String?
-  createdAt  DateTime      @default(now())
+  purpose           String
+  status            BookingStatus @default(PENDING)
+  notes             String?
+  recurrenceGroupId String?
+  createdAt         DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 }

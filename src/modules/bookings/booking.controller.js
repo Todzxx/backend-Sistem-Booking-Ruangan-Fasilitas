@@ -1,8 +1,9 @@
 const prisma = require('../../config/prisma');
 const Joi = require('joi');
+const { v4: uuidv4 } = require('uuid');
 
 /**
- * Controller for managing Bookings with overlap detection and status workflow.
+ * Controller for managing Bookings with overlap detection, status workflow, and recurrence logic.
  */
 const bookingController = {
   /**
@@ -39,6 +40,25 @@ const bookingController = {
   },
 
   /**
+   * Helper to generate a list of recurring dates (Weekly)
+   * @param {Date} start - Base start date
+   * @param {Date} end - Base end date
+   * @param {number} count - Number of weeks
+   * @returns {Array} - List of { startTime, endTime } pairs
+   */
+  generateWeeklyDates: (start, end, count) => {
+    const dates = [];
+    for (let i = 0; i < count; i++) {
+      const nextStart = new Date(start);
+      const nextEnd = new Date(end);
+      nextStart.setDate(start.getDate() + i * 7);
+      nextEnd.setDate(end.getDate() + i * 7);
+      dates.push({ startTime: nextStart, endTime: nextEnd });
+    }
+    return dates;
+  },
+
+  /**
    * Check availability for a facility at a specific time range
    */
   checkAvailability: async (req, res, next) => {
@@ -72,7 +92,7 @@ const bookingController = {
   },
 
   /**
-   * Create a new booking request
+   * Create a new booking request (Supports Recurrence)
    */
   createBooking: async (req, res, next) => {
     try {
@@ -81,6 +101,12 @@ const bookingController = {
         startTime: Joi.date().greater('now').required(),
         endTime: Joi.date().greater(Joi.ref('startTime')).required(),
         purpose: Joi.string().min(5).required(),
+        isRecurring: Joi.boolean().default(false),
+        recurrenceCount: Joi.number().integer().min(1).max(12).when('isRecurring', {
+          is: true,
+          then: Joi.required(),
+          otherwise: Joi.optional(),
+        }),
       });
 
       const { error, value } = schema.validate(req.body);
@@ -88,7 +114,7 @@ const bookingController = {
         return res.status(400).json({ status: 'fail', message: error.details[0].message });
       }
 
-      const { facilityId, startTime, endTime, purpose } = value;
+      const { facilityId, startTime, endTime, purpose, isRecurring, recurrenceCount } = value;
 
       // 1. Check if facility exists
       const facility = await prisma.facility.findUnique({ where: { id: facilityId } });
@@ -96,32 +122,46 @@ const bookingController = {
         return res.status(404).json({ status: 'fail', message: 'Facility not found' });
       }
 
-      // 2. Check for overlaps
-      const hasOverlap = await bookingController.isOverlapping(facilityId, startTime, endTime);
-      if (hasOverlap) {
-        return res.status(409).json({
-          status: 'fail',
-          message: 'Selected time slot is already booked or pending approval',
-        });
+      // 2. Prepare dates
+      const bookingDates = isRecurring
+        ? bookingController.generateWeeklyDates(startTime, endTime, recurrenceCount)
+        : [{ startTime, endTime }];
+
+      // 3. Check for overlaps for ALL dates in the series
+      for (const date of bookingDates) {
+        const hasOverlap = await bookingController.isOverlapping(facilityId, date.startTime, date.endTime);
+        if (hasOverlap) {
+          return res.status(409).json({
+            status: 'fail',
+            message: `Selected time slot is already booked or pending approval at ${date.startTime.toDateString()}`,
+          });
+        }
       }
 
-      // 3. Create booking
-      const booking = await prisma.booking.create({
-        data: {
-          userId: req.user.id,
-          facilityId,
-          startTime,
-          endTime,
-          purpose,
-          status: 'PENDING',
-        },
-        include: { facility: true },
-      });
+      // 4. Create booking(s) using a transaction
+      const recurrenceGroupId = isRecurring ? uuidv4() : null;
+      
+      const result = await prisma.$transaction(
+        bookingDates.map((date) =>
+          prisma.booking.create({
+            data: {
+              userId: req.user.id,
+              facilityId,
+              startTime: date.startTime,
+              endTime: date.endTime,
+              purpose,
+              status: 'PENDING',
+              recurrenceGroupId,
+            },
+            include: { facility: true },
+          })
+        )
+      );
 
       res.status(201).json({
         status: 'success',
-        message: 'Booking request submitted successfully',
-        data: booking,
+        message: 'Booking request(s) submitted successfully',
+        data: isRecurring ? result : result[0],
       });
     } catch (error) {
       next(error);
@@ -205,11 +245,12 @@ const bookingController = {
   },
 
   /**
-   * Cancel a booking by the owner (User can only cancel if PENDING)
+   * Cancel a booking by the owner (Supports Cancelling All in series)
    */
   cancelBooking: async (req, res, next) => {
     try {
       const { id } = req.params;
+      const { cancelAll } = req.query; // true if want to cancel entire series
 
       const booking = await prisma.booking.findUnique({ where: { id } });
       if (!booking) {
@@ -232,6 +273,23 @@ const bookingController = {
         });
       }
 
+      if (cancelAll === 'true' && booking.recurrenceGroupId) {
+        // Cancel entire series
+        const deleted = await prisma.booking.updateMany({
+          where: { 
+            recurrenceGroupId: booking.recurrenceGroupId,
+            status: 'PENDING' 
+          },
+          data: { status: 'CANCELLED' },
+        });
+
+        return res.status(200).json({
+          status: 'success',
+          message: `${deleted.count} recurring bookings cancelled successfully`,
+        });
+      }
+
+      // Cancel single booking
       const updatedBooking = await prisma.booking.update({
         where: { id },
         data: { status: 'CANCELLED' },
@@ -249,13 +307,11 @@ const bookingController = {
 
   /**
    * Get all bookings for a specific facility (useful for calendar view)
-   * This is part of the Calendar System feature.
    */
   getBookingsByFacility: async (req, res, next) => {
     try {
       const { facilityId } = req.params;
 
-      // Find all bookings that are not REJECTED or CANCELLED
       const bookings = await prisma.booking.findMany({
         where: {
           facilityId,
