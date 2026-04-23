@@ -30,7 +30,7 @@ const userService = {
         name,
         email,
         password: hashedPassword,
-        role: role || 'USER',
+        role: 'USER', // Always force USER role for public registration
       },
     });
 

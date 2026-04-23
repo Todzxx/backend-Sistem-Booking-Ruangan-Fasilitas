@@ -30,6 +30,13 @@ app.use('/api/v1/auth', userRoutes);
 app.use('/api/v1/facilities', facilityRoutes);
 app.use('/api/v1/bookings', bookingRoutes);
 
+// 404 Router handler
+app.use((req, res, next) => {
+  const error = new Error(`Route not found - ${req.originalUrl}`);
+  error.statusCode = 404;
+  next(error);
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;

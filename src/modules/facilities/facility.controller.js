@@ -1,6 +1,6 @@
 const facilityService = require('./facility.service');
 const { success } = require('../../utils/responseHandler');
-const Joi = require('joi');
+const facilityValidation = require('../../validations/facility.validation');
 
 /**
  * Controller for managing Facilities (Rooms, Labs, Projectors, etc.)
@@ -27,13 +27,7 @@ const facilityController = {
 
   createFacility: async (req, res, next) => {
     try {
-      const schema = Joi.object({
-        name: Joi.string().min(3).required(),
-        description: Joi.string().allow('', null),
-        capacity: Joi.number().integer().min(1).required(),
-      });
-
-      const { error, value } = schema.validate(req.body);
+      const { error, value } = facilityValidation.create.validate(req.body);
       if (error) {
         const err = new Error(error.details[0].message);
         err.statusCode = 400;
@@ -50,13 +44,7 @@ const facilityController = {
   updateFacility: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const schema = Joi.object({
-        name: Joi.string().min(3),
-        description: Joi.string().allow('', null),
-        capacity: Joi.number().integer().min(1),
-      });
-
-      const { error, value } = schema.validate(req.body);
+      const { error, value } = facilityValidation.update.validate(req.body);
       if (error) {
         const err = new Error(error.details[0].message);
         err.statusCode = 400;

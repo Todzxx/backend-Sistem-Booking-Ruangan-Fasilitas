@@ -1,20 +1,12 @@
 const userService = require('./user.service');
 const { success } = require('../../utils/responseHandler');
-const Joi = require('joi');
+const userValidation = require('../../validations/user.validation');
 
 const userController = {
   // Register a new user
   register: async (req, res, next) => {
     try {
-      // Validation schema
-      const schema = Joi.object({
-        name: Joi.string().min(3).required(),
-        email: Joi.string().email().required(),
-        password: Joi.string().min(6).required(),
-        role: Joi.string().valid('USER', 'ADMIN').default('USER'),
-      });
-
-      const { error, value } = schema.validate(req.body);
+      const { error, value } = userValidation.register.validate(req.body);
       if (error) {
         const err = new Error(error.details[0].message);
         err.statusCode = 400;
@@ -32,12 +24,7 @@ const userController = {
   // Login user
   login: async (req, res, next) => {
     try {
-      const schema = Joi.object({
-        email: Joi.string().email().required(),
-        password: Joi.string().required(),
-      });
-
-      const { error, value } = schema.validate(req.body);
+      const { error, value } = userValidation.login.validate(req.body);
       if (error) {
         const err = new Error(error.details[0].message);
         err.statusCode = 400;

@@ -38,6 +38,7 @@ model Facility {
   name        String
   description String?
   capacity    Int?
+  isActive    Boolean   @default(true)
   bookings    Booking[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

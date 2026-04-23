@@ -33,15 +33,25 @@ const bookingService = {
   },
 
   /**
-   * Helper to generate a list of recurring dates (Weekly)
+   * Helper to generate a list of recurring dates
    */
-  generateWeeklyDates: (start, end, count) => {
+  generateRecurringDates: (start, end, type, count) => {
     const dates = [];
     for (let i = 0; i < count; i++) {
       const nextStart = new Date(start);
       const nextEnd = new Date(end);
-      nextStart.setDate(start.getDate() + i * 7);
-      nextEnd.setDate(end.getDate() + i * 7);
+      
+      if (type === 'DAILY') {
+        nextStart.setDate(start.getDate() + i);
+        nextEnd.setDate(end.getDate() + i);
+      } else if (type === 'WEEKLY') {
+        nextStart.setDate(start.getDate() + i * 7);
+        nextEnd.setDate(end.getDate() + i * 7);
+      } else if (type === 'MONTHLY') {
+        nextStart.setMonth(start.getMonth() + i);
+        nextEnd.setMonth(end.getMonth() + i);
+      }
+      
       dates.push({ startTime: nextStart, endTime: nextEnd });
     }
     return dates;
@@ -68,37 +78,51 @@ const bookingService = {
    * Create a new booking (Supports Recurrence)
    */
   createBooking: async (bookingData, userId) => {
-    const { facilityId, startTime, endTime, purpose, isRecurring, recurrenceCount } = bookingData;
+    const { facilityId, startTime, endTime, purpose, isRecurring, recurrenceType, recurrenceCount } = bookingData;
 
-    // 1. Check if facility exists
-    const facility = await prisma.facility.findUnique({ where: { id: facilityId } });
-    if (!facility) {
-      const error = new Error('Facility not found');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    // 2. Prepare dates
-    const bookingDates = isRecurring
-      ? bookingService.generateWeeklyDates(startTime, endTime, recurrenceCount)
-      : [{ startTime, endTime }];
-
-    // 3. Check for overlaps for ALL dates in the series
-    for (const date of bookingDates) {
-      const hasOverlap = await bookingService.isOverlapping(facilityId, date.startTime, date.endTime);
-      if (hasOverlap) {
-        const error = new Error(`Selected time slot is already booked or pending approval at ${date.startTime.toDateString()}`);
-        error.statusCode = 409;
+    return await prisma.$transaction(async (tx) => {
+      // 1. Check if facility exists and is active
+      const facility = await tx.facility.findUnique({ 
+        where: { id: facilityId } 
+      });
+      
+      if (!facility || !facility.isActive) {
+        const error = new Error('Facility not found or currently unavailable');
+        error.statusCode = 404;
         throw error;
       }
-    }
 
-    // 4. Create booking(s) using a transaction
-    const recurrenceGroupId = isRecurring ? uuidv4() : null;
-    
-    const result = await prisma.$transaction(
-      bookingDates.map((date) =>
-        prisma.booking.create({
+      // 2. Prepare dates
+      const bookingDates = isRecurring
+        ? bookingService.generateRecurringDates(startTime, endTime, recurrenceType, recurrenceCount)
+        : [{ startTime, endTime }];
+
+      // 3. Create recurrence group ID if needed
+      const recurrenceGroupId = isRecurring ? uuidv4() : null;
+
+      // 4. Overlap check and Creation for each date
+      const createdBookings = [];
+      for (const date of bookingDates) {
+        // Overlap checking INSIDE transaction
+        const overlapping = await tx.booking.findFirst({
+          where: {
+            facilityId,
+            status: { in: [BOOKING_STATUS.PENDING, BOOKING_STATUS.APPROVED] },
+            OR: [
+              { startTime: { lt: date.endTime, gte: date.startTime } },
+              { endTime: { gt: date.startTime, lte: date.endTime } },
+              { startTime: { lte: date.startTime }, endTime: { gte: date.endTime } },
+            ],
+          },
+        });
+
+        if (overlapping) {
+          const error = new Error(`Time slot is already booked or pending at ${date.startTime.toLocaleString()}`);
+          error.statusCode = 409;
+          throw error;
+        }
+
+        const booking = await tx.booking.create({
           data: {
             userId,
             facilityId,
@@ -109,11 +133,12 @@ const bookingService = {
             recurrenceGroupId,
           },
           include: { facility: true },
-        })
-      )
-    );
+        });
+        createdBookings.push(booking);
+      }
 
-    return isRecurring ? result : result[0];
+      return isRecurring ? createdBookings : createdBookings[0];
+    });
   },
 
   /**
