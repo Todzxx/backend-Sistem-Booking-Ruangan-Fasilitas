@@ -1,0 +1,43 @@
+{
+  "name": "backend-sistem-booking-ruangan-fasilitas",
+  "version": "1.1.0",
+  "description": "Aplikasi web untuk mengelola peminjaman ruangan dan fasilitas seperti laboratorium, ruang rapat, dan proyektor agar tidak terjadi bentrok jadwal. Pengguna dapat mengecek ketersediaan dan mengajukan booking, lalu setiap pengajuan akan melalui proses approval admin sebelum dinyatakan valid dan dapat digunakan.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "prisma:generate": "npx prisma generate",
+    "prisma:migrate": "npx prisma migrate dev",
+    "prisma:studio": "npx prisma studio",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Todzxx/backend-Sistem-Booking-Ruangan-Fasilitas.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Todzxx/backend-Sistem-Booking-Ruangan-Fasilitas/issues"
+  },
+  "homepage": "https://github.com/Todzxx/backend-Sistem-Booking-Ruangan-Fasilitas#readme",
+  "dependencies": {
+    "@prisma/client": "^6.0.0",
+    "axios": "^1.15.2",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "joi": "^18.1.2",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "prisma": "^6.0.0"
+  }
+}
