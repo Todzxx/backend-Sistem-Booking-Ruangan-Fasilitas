@@ -144,25 +144,104 @@ const bookingService = {
   /**
    * Get bookings for a user
    */
-  getUserBookings: async (userId) => {
-    return await prisma.booking.findMany({
-      where: { userId },
-      include: { facility: true },
-      orderBy: { startTime: 'desc' },
-    });
+  getUserBookings: async (userId, query = {}) => {
+    const { page = 1, limit = 20, sortBy = 'startTime', sortOrder = 'desc', status, startDate, endDate } = query;
+
+    const skip = (page - 1) * limit;
+    const take = Math.min(parseInt(limit), 100);
+
+    const where = { userId };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (startDate || endDate) {
+      where.startTime = {};
+      if (startDate) where.startTime.gte = new Date(startDate);
+      if (endDate) where.startTime.lte = new Date(endDate);
+    }
+
+    const orderBy = {};
+    const validSortFields = ['startTime', 'endTime', 'createdAt', 'status'];
+    const field = validSortFields.includes(sortBy) ? sortBy : 'startTime';
+    orderBy[field] = sortOrder === 'desc' ? 'desc' : 'asc';
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where,
+        include: { facility: true },
+        orderBy,
+        skip,
+        take,
+      }),
+      prisma.booking.count({ where }),
+    ]);
+
+    return {
+      data: bookings,
+      pagination: {
+        page: parseInt(page),
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
+    };
   },
 
   /**
    * Get all bookings (Admin)
    */
-  getAllBookings: async () => {
-    return await prisma.booking.findMany({
-      include: {
-        facility: true,
-        user: { select: { name: true, email: true } },
+  getAllBookings: async (query = {}) => {
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', status, facilityId, startDate, endDate } = query;
+
+    const skip = (page - 1) * limit;
+    const take = Math.min(parseInt(limit), 100);
+
+    const where = {};
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (facilityId) {
+      where.facilityId = facilityId;
+    }
+
+    if (startDate || endDate) {
+      where.startTime = {};
+      if (startDate) where.startTime.gte = new Date(startDate);
+      if (endDate) where.startTime.lte = new Date(endDate);
+    }
+
+    const orderBy = {};
+    const validSortFields = ['startTime', 'endTime', 'createdAt', 'updatedAt', 'status'];
+    const field = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    orderBy[field] = sortOrder === 'desc' ? 'desc' : 'asc';
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where,
+        include: {
+          facility: true,
+          user: { select: { name: true, email: true } },
+        },
+        orderBy,
+        skip,
+        take,
+      }),
+      prisma.booking.count({ where }),
+    ]);
+
+    return {
+      data: bookings,
+      pagination: {
+        page: parseInt(page),
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
       },
-      orderBy: { createdAt: 'desc' },
-    });
+    };
   },
 
   /**
@@ -212,13 +291,22 @@ const bookingService = {
     }
 
     if (cancelAll === true && booking.recurrenceGroupId) {
-      return await prisma.booking.updateMany({
-        where: { 
+      const count = await prisma.booking.updateMany({
+        where: {
           recurrenceGroupId: booking.recurrenceGroupId,
-          status: BOOKING_STATUS.PENDING 
+          userId,
+          status: BOOKING_STATUS.PENDING,
         },
         data: { status: BOOKING_STATUS.CANCELLED },
       });
+
+      if (count.count === 0) {
+        const error = new Error('No pending bookings found in this recurrence group');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      return count;
     }
 
     return await prisma.booking.update({

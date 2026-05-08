@@ -2,13 +2,10 @@ const facilityService = require('./facility.service');
 const { success } = require('../../utils/responseHandler');
 const facilityValidation = require('../../validations/facility.validation');
 
-/**
- * Controller for managing Facilities (Rooms, Labs, Projectors, etc.)
- */
 const facilityController = {
   getAllFacilities: async (req, res, next) => {
     try {
-      const data = await facilityService.getAllFacilities();
+      const data = await facilityService.getAllFacilities(req.query);
       return success(res, 'Facilities fetched successfully', data);
     } catch (error) {
       next(error);

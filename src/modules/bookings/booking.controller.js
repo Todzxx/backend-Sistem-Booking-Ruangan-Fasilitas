@@ -40,7 +40,7 @@ const bookingController = {
 
   getMyBookings: async (req, res, next) => {
     try {
-      const data = await bookingService.getUserBookings(req.user.id);
+      const data = await bookingService.getUserBookings(req.user.id, req.query);
       return success(res, 'My bookings fetched successfully', data);
     } catch (error) {
       next(error);
@@ -49,7 +49,7 @@ const bookingController = {
 
   getAllBookings: async (req, res, next) => {
     try {
-      const data = await bookingService.getAllBookings();
+      const data = await bookingService.getAllBookings(req.query);
       return success(res, 'All bookings fetched successfully', data);
     } catch (error) {
       next(error);
