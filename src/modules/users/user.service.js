@@ -1,19 +1,11 @@
 const bcrypt = require('bcryptjs');
 const prisma = require('../../config/prisma');
-const { generateToken } = require('../../utils/token');
+const { generateToken, generateRefreshToken, verifyRefreshToken } = require('../../utils/token');
 
-/**
- * Service for handling User related logic (Auth, Profile, etc.)
- */
 const userService = {
-  /**
-   * Register a new user
-   * @param {Object} userData - User data (name, email, password, role)
-   */
   registerUser: async (userData) => {
-    const { name, email, password, role } = userData;
+    const { name, email, password } = userData;
 
-    // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       const error = new Error('Email already registered');
@@ -21,49 +13,63 @@ const userService = {
       throw error;
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        role: 'USER', // Always force USER role for public registration
+        role: 'USER',
       },
     });
 
-    // Remove password from returned object
     const { password: _, ...userWithoutPassword } = user;
     return userWithoutPassword;
   },
 
-  /**
-   * Login user and return token
-   * @param {string} email 
-   * @param {string} password 
-   */
   loginUser: async (email, password) => {
-    // Find user
     const user = await prisma.user.findUnique({ where: { email } });
-    
+
     if (!user || !(await bcrypt.compare(password, user.password))) {
       const error = new Error('Invalid email or password');
       error.statusCode = 401;
       throw error;
     }
 
-    // Generate token
-    const token = generateToken({ id: user.id, role: user.role });
+    const payload = { id: user.id, role: user.role };
+    const token = generateToken(payload);
+    const refreshToken = generateRefreshToken(payload);
 
-    // Remove password from returned object
     const { password: _, ...userWithoutPassword } = user;
-    
+
     return {
       user: userWithoutPassword,
       token,
+      refreshToken,
     };
+  },
+
+  refreshToken: async (token) => {
+    const decoded = verifyRefreshToken(token);
+    if (!decoded) {
+      const error = new Error('Invalid or expired refresh token');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    if (!user) {
+      const error = new Error('User belonging to this token no longer exists');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    const payload = { id: user.id, role: user.role };
+    const newToken = generateToken(payload);
+    const newRefreshToken = generateRefreshToken(payload);
+
+    return { token: newToken, refreshToken: newRefreshToken };
   },
 };
 

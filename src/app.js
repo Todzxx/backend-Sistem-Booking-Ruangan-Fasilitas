@@ -3,30 +3,55 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
+const { validateEnv } = require('./utils/env');
+const logger = require('./utils/logger');
+const sanitizeMiddleware = require('./middleware/sanitize.middleware');
+const { authLimiter, apiLimiter } = require('./middleware/rateLimiter.middleware');
 const userRoutes = require('./modules/users/user.routes');
 const facilityRoutes = require('./modules/facilities/facility.routes');
 const bookingRoutes = require('./modules/bookings/booking.routes');
 
 dotenv.config();
+validateEnv();
 
 const app = express();
 
-// Middlewares
+// Security headers
 app.use(helmet());
-app.use(cors());
-app.use(morgan('dev'));
-app.use(express.json());
+
+// CORS configuration
+const corsOrigin = process.env.CORS_ORIGIN || '*';
+app.use(cors({
+  origin: corsOrigin === '*' ? '*' : corsOrigin.split(',').map(s => s.trim()),
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// Logging
+app.use(morgan('dev', {
+  stream: { write: (message) => logger.info(message.trim()) },
+}));
+
+// Body parsing
+app.use(express.json({ limit: '10kb' }));
+
+// Input sanitization (XSS prevention)
+app.use(sanitizeMiddleware);
+
+// General API rate limiter
+app.use('/api/', apiLimiter);
 
 // Basic Route
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to Room & Facility Booking API',
-    status: 'Server is running'
+    status: 'Server is running',
   });
 });
 
 // Routes
-app.use('/api/v1/auth', userRoutes);
+app.use('/api/v1/auth', authLimiter, userRoutes);
 app.use('/api/v1/facilities', facilityRoutes);
 app.use('/api/v1/bookings', bookingRoutes);
 
@@ -41,6 +66,10 @@ app.use((req, res, next) => {
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const status = statusCode >= 400 && statusCode < 500 ? 'fail' : 'error';
+
+  if (statusCode === 500) {
+    logger.error(`[${req.method}] ${req.originalUrl} - ${err.message}`, { stack: err.stack });
+  }
 
   res.status(statusCode).json({
     status,
